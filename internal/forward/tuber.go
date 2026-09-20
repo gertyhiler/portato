@@ -294,6 +294,14 @@ func (t *Tuber) Reconfigure(cfg config.Tuber, def config.Defaults) error {
 	return nil
 }
 
+func (t *Tuber) UpdateMetadata(cfg config.Tuber, def config.Defaults) {
+	t.mu.Lock()
+	t.cfg = cfg
+	t.defaults = def
+	t.mu.Unlock()
+	t.notifyChange()
+}
+
 func (t *Tuber) Status() Status {
 	t.mu.RLock()
 	defer t.mu.RUnlock()

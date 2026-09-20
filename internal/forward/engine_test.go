@@ -15,14 +15,15 @@ import (
 )
 
 type fakeTuber struct {
-	cfg        config.Tuber
-	mu         sync.Mutex
-	state      State
-	starts     atomic.Int64
-	stops      atomic.Int64
-	restarts   atomic.Int64
-	withStarts atomic.Int64
-	startErr   error
+	cfg         config.Tuber
+	mu          sync.Mutex
+	state       State
+	starts      atomic.Int64
+	stops       atomic.Int64
+	restarts    atomic.Int64
+	metaUpdates atomic.Int64
+	withStarts  atomic.Int64
+	startErr    error
 
 	// listenerFile/listenerErr drive ListenerFile for hand-off tests. A nil
 	// file and nil err yield ErrNoListener (the "nothing to pass" case).
@@ -77,10 +78,17 @@ func (f *fakeTuber) Reconfigure(cfg config.Tuber, _ config.Defaults) error {
 	return nil
 }
 
+func (f *fakeTuber) UpdateMetadata(cfg config.Tuber, _ config.Defaults) {
+	f.metaUpdates.Add(1)
+	f.mu.Lock()
+	f.cfg = cfg
+	f.mu.Unlock()
+}
+
 func (f *fakeTuber) Status() Status {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return Status{Name: f.cfg.Name, Type: f.cfg.Type, State: f.state}
+	return Status{Name: f.cfg.Name, Type: f.cfg.Type, State: f.state, Tags: f.cfg.Tags}
 }
 
 func (f *fakeTuber) ListenerFile() (*os.File, error) {
@@ -510,11 +518,83 @@ func TestEngineStartEnabledWith_Adopts(t *testing.T) {
 	}
 }
 
-// TestTuberChanged covers the field-by-field comparison engine.Reload uses to
-// decide whether to Reconfigure a tuber. The previously-missing fields (Tags,
-// Jump, Socks5User/Socks5Password) are the load-bearing cases: an edit that
-// changes ONLY one of them must be detected, or the running tuber's cfg (and
-// so Status()) stays stale — the live-tag-edit regression.
+// TestTuberChanged covers the field-by-field comparison Engine.Reload uses to
+// decide whether to Reconfigure a tuber. Tags are metadata: a tags-only edit
+// reports false here and Reload routes it through UpdateMetadata instead
+// (Phase 55) — the live-tag-edit Status freshness UpdateMetadata now owns.
+// TestEngineReload_TagsOnlyNoReconnect pins the Phase 55 DoD: a tags-only
+// edit routes through UpdateMetadata — no restart, no state transition, and
+// Status() still reflects the new tags.
+func TestEngineReload_TagsOnlyNoReconnect(t *testing.T) {
+	cfg := &config.Config{Tubers: []config.Tuber{tuberCfg("a")}}
+	e, fakes := newTestEngine(cfg)
+	if err := e.Enable("a"); err != nil {
+		t.Fatalf("Enable: %v", err)
+	}
+
+	edited := tuberCfg("a")
+	edited.Tags = []string{"prod"}
+	e.Reload(&config.Config{Tubers: []config.Tuber{edited}})
+
+	ft := fakes["a"]
+	if ft.restarts.Load() != 0 || ft.stops.Load() != 0 {
+		t.Errorf("tags-only edit reconnected: restarts=%d stops=%d", ft.restarts.Load(), ft.stops.Load())
+	}
+	if ft.metaUpdates.Load() != 1 {
+		t.Errorf("UpdateMetadata calls = %d, want 1", ft.metaUpdates.Load())
+	}
+	st := ft.Status()
+	if st.State != Connected {
+		t.Errorf("state = %v, want Connected (no blip)", st.State)
+	}
+	if len(st.Tags) != 1 || st.Tags[0] != "prod" {
+		t.Errorf("Status().Tags = %v, want [prod]", st.Tags)
+	}
+}
+
+// TestEngineReload_ConnectionChangeStillReconfigures pins that the metadata
+// path didn't swallow real connection edits: a Local change still
+// reconfigures (and restarts a running tuber).
+func TestEngineReload_ConnectionChangeStillReconfigures(t *testing.T) {
+	cfg := &config.Config{Tubers: []config.Tuber{tuberCfg("a")}}
+	e, fakes := newTestEngine(cfg)
+	if err := e.Enable("a"); err != nil {
+		t.Fatalf("Enable: %v", err)
+	}
+
+	edited := tuberCfg("a")
+	edited.Local = "10001"
+	edited.Tags = []string{"prod"}
+	e.Reload(&config.Config{Tubers: []config.Tuber{edited}})
+
+	ft := fakes["a"]
+	if ft.restarts.Load() != 1 {
+		t.Errorf("restarts = %d, want 1 (connection edit must reconnect)", ft.restarts.Load())
+	}
+	if ft.metaUpdates.Load() != 0 {
+		t.Errorf("metaUpdates = %d, want 0", ft.metaUpdates.Load())
+	}
+}
+
+// TestEngineReload_TagsOnlyOnOffTuberUpdatesStatus pins the off-tuber case:
+// metadata refresh still lands (Status fresh) and never starts the tuber.
+func TestEngineReload_TagsOnlyOnOffTuberUpdatesStatus(t *testing.T) {
+	cfg := &config.Config{Tubers: []config.Tuber{tuberCfg("a")}}
+	e, fakes := newTestEngine(cfg)
+
+	edited := tuberCfg("a")
+	edited.Tags = []string{"prod"}
+	e.Reload(&config.Config{Tubers: []config.Tuber{edited}})
+
+	ft := fakes["a"]
+	if ft.starts.Load() != 0 {
+		t.Errorf("starts = %d, want 0 (off tuber must not start)", ft.starts.Load())
+	}
+	if len(ft.Status().Tags) != 1 || ft.Status().Tags[0] != "prod" {
+		t.Errorf("Status().Tags = %v, want [prod]", ft.Status().Tags)
+	}
+}
+
 func TestTuberChanged(t *testing.T) {
 	base := config.Tuber{
 		Name: "db", Type: "local", Local: "1", Remote: "r",
@@ -539,9 +619,9 @@ func TestTuberChanged(t *testing.T) {
 		{"SSH", func(t *config.Tuber) { t.SSH = "u@h:23" }, true},
 		{"Identity", func(t *config.Tuber) { t.Identity = "/k2" }, true},
 		{"Jump", func(t *config.Tuber) { t.Jump = "user@edge" }, true},
-		{"Tags add", func(t *config.Tuber) { t.Tags = []string{"prod", "db"} }, true},
-		{"Tags remove", func(t *config.Tuber) { t.Tags = nil }, true},
-		{"Tags reorder (different set)", func(t *config.Tuber) { t.Tags = []string{"db", "prod"} }, true},
+		{"Tags add", func(t *config.Tuber) { t.Tags = []string{"prod", "db"} }, false},
+		{"Tags remove", func(t *config.Tuber) { t.Tags = nil }, false},
+		{"Tags reorder (different set)", func(t *config.Tuber) { t.Tags = []string{"db", "prod"} }, false},
 		{"Socks5User", func(t *config.Tuber) { t.Socks5User = "s2" }, true},
 		{"Socks5Password", func(t *config.Tuber) { t.Socks5Password = "p2" }, true},
 	}

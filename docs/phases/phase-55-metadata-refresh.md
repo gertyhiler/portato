@@ -15,9 +15,9 @@ ROADMAP post-1.0 item 6, promoted. `tuberChanged` (`engine.go:364-390`) compares
 
 ## Tasks
 
-- [ ] Split the changed-field check into connection-affecting fields vs metadata, with the classification explicit at the split site.
-- [ ] `Engine.Reload`: a tags-only change → `UpdateMetadata` (update cfg, notify, keep the client and listeners); `Status().Tags` stays fresh.
-- [ ] Tests: a tags-only reload leaves the SSH client instance unchanged (no reconnect, no state transition); a connection-field change still reconnects; `Status` reflects the new tags.
+- [x] Split the changed-field check into connection-affecting fields vs metadata, with the classification explicit at the split site.
+- [x] `Engine.Reload`: a tags-only change → `UpdateMetadata` (update cfg, notify, keep the client and listeners); `Status().Tags` stays fresh.
+- [x] Tests: a tags-only reload leaves the SSH client instance unchanged (no reconnect, no state transition); a connection-field change still reconnects; `Status` reflects the new tags.
 
 ## Definition of Done
 

@@ -22,6 +22,11 @@ type tuberer interface {
 	// Reconfigure updates a tuber's config/defaults in place; it restarts the
 	// tuber only if it is currently running. Used by Engine.Reload.
 	Reconfigure(cfg config.Tuber, def config.Defaults) error
+	// UpdateMetadata swaps config/defaults in place without touching the
+	// connection (no restart, no state change) and notifies subscribers;
+	// Status() reflects the new fields. Used by Engine.Reload for
+	// metadata-only edits (tags).
+	UpdateMetadata(cfg config.Tuber, def config.Defaults)
 	Status() Status
 	// ListenerFile returns a dup'd fd for the tuber's local listener, or
 	// ErrNoListener when there is nothing to pass (stopped / type=remote).
@@ -334,6 +339,10 @@ func (e *Engine) Reload(cfg *config.Config) {
 			// reflects the new Local/Remote, and restart only if it was running —
 			// editing an off tuber must not start it.
 			_ = e.tubers[name].Reconfigure(t, cfg.Defaults)
+		} else if !sameStrings(old.Tags, t.Tags) {
+			// Metadata-only edit (tags): swap the cfg so Status() stays fresh
+			// without disturbing a live connection.
+			e.tubers[name].UpdateMetadata(t, cfg.Defaults)
 		}
 	}
 	e.configs = newConfigs
@@ -361,6 +370,8 @@ func (e *Engine) snapshot() []tuberer {
 
 // tuberChanged reports whether connection-relevant fields differ.
 // Enabled is intentionally excluded: toggling it must not restart a tuber.
+// Tags are metadata, not connection fields — Reload routes a tags-only edit
+// through UpdateMetadata instead, so they are excluded here too.
 func tuberChanged(a, b config.Tuber) bool {
 	if a.Name != b.Name || a.Type != b.Type {
 		return true
@@ -381,9 +392,6 @@ func tuberChanged(a, b config.Tuber) bool {
 		return true
 	}
 	if a.Socks5User != b.Socks5User || a.Socks5Password != b.Socks5Password {
-		return true
-	}
-	if !sameStrings(a.Tags, b.Tags) {
 		return true
 	}
 	return false
