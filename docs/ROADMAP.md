@@ -80,6 +80,14 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` done
 
 ## Current focus
 
+**Phases 52–59 are registered (`[ ]`)** from the September 2026 multi-model
+feature analysis: wave 1 — 52 editor round-trip integrity (fixes a silent
+field-loss bug), 53 CLI CRUD, 54 status/exit codes, 55 metadata-only
+refresh, 56 port preflight; then the engine batch — 57 foundation (unified
+reconnect driver + typed events) gating 58 fast reconnect and 59
+hooks/notifications. Per-tunnel stats is deferred pending real demand (see
+the note at the candidate list).
+
 **Phases 0–51 are all `[x]`.** The last one to close was 51 (TUI header
 version segment): the running version next to `mode:`, with the phase-49
 update hint as the sibling segment (shortened on narrow terminals). Before
@@ -136,12 +144,19 @@ time-based (not just size-based) log rotation.
 Beyond Phase 48, the following are prioritised candidates — not yet formal
 phases; each is promoted to a numbered phase (with a `phase-N-*.md` file)
 when taken up. All are additive, so they ship as MINORs; patch releases are
-fixes only.
+fixes only. Of the original six, two are now promoted into the registered
+phases 52–59 (hooks → Phase 59, metadata-only refresh → Phase 55) and one
+is deferred (per-tunnel stats — see its note).
 
-1. **Per-tunnel stats** — bytes in/out, connection count, reconnect count
-   (collected at the single `pipe()` chokepoint) shown in the TUI and
-   `list --json`; folds in the deferred Phase-39 aggregate line
-   (`n connected · n error · n off`).
+1. **Per-tunnel stats** — *deferred, no scheduled phase*: bytes in/out,
+   connection count, reconnect count shown in the TUI and `list --json`;
+   folds in the deferred Phase-39 aggregate line (`n connected · n error ·
+   n off` — which needs no byte counters and may land alone). Premise
+   correction: collection is **not** a single `pipe()` chokepoint — the
+   `dynamic`/SOCKS5 path copies inside `go-socks5` (`srv.ServeConn`,
+   `tuber.go:582`) and never reaches `pipe()`, so instrumentation has two
+   sites (three while `run()`/`runRemote()` stay separate; Phase 57 unifies
+   them).
 2. **Unix-socket forwarding** — `-L /var/run/docker.sock:…` to reach a
    remote `docker.sock`; the forward direction is cheap via
    `client.Dial("unix", path)`, the reverse (`streamlocal-forward@openssh.com`)
@@ -149,15 +164,17 @@ fixes only.
 3. **Lazy tunnels** — dial SSH only on the first connection + an idle
    timeout to disconnect; fits the FD-hand-off listener/client separation
    (Phase 16). Solves the "laptop with 20 tunnels" pain.
-4. **State-change hooks / notifications** — `on_error:` / `on_connect:` cmd
-   and/or a desktop notification when a tunnel drops or recovers; the daemon
-   is headless, so this surfaces breaks without opening the TUI.
+4. **State-change hooks / notifications** — promoted to **Phase 59**:
+   `on_error:` / `on_connect:` cmd and/or a desktop notification when a
+   tunnel drops or recovers; the daemon is headless, so this surfaces
+   breaks without opening the TUI (gated on Phase 57's typed event).
 5. **Shared SSH client pool** — reuse one `*ssh.Client` per
    `user@host:port` with refcounting (fewer handshakes / password prompts
    for many tunnels to one bastion). The riskiest — it reworks the
    per-tuber reconnect / backoff / keepalive state machine onto a shared
    client — so it lands last.
- 6. **Metadata-only refresh (no reconnect)** — editing *only* a tuber's
+ 6. **Metadata-only refresh (no reconnect)** — promoted to **Phase 55**:
+     editing *only* a tuber's
     `tags:` currently triggers a full `Reconfigure` (SSH reconnect) because
     `tuberChanged` lumps Tags with connection-affecting fields (the v1.4.1
     fix). Tags are pure metadata; split a metadata-refresh path in
@@ -218,6 +235,14 @@ fixes only.
 - **Phase 49** — update checker (done, `[x]`): `internal/update` + `portato update check` / `update consent`; a consent-gated daily GitHub `releases/latest` poll (anonymous, 24h TTL, cache in `xdg.StateHome/portato/update.json`) surfacing "vX.Y.Z available" in the TUI header and `portato doctor`; the one-time consent ask (`defaults.update_check` absent = pending; `[Y/n]`, Enter = yes) follows the Phase-48 nudge pattern (interactive launcher + install + a green doctor; the daemon never asks), and consent lives in `config.yaml` (comment-preserving AST patch; a live edit reaches the daemon through the Phase-28 reload path). Hand-rolled semver under the strict-`vX.Y.Z` VERSIONING policy; the API base is compile-time-only (no runtime redirect); zero new dependencies. **Shipped in v1.7.0** (verified live: the released binary checks itself against releases/latest and reports "up to date"; the brew cask and scoop manifest published from the tag). depends_on [21].
 - **Phase 51** — TUI header version segment (done, `[x]`): the running version next to `mode:` (`mode: attach  v1.8.1`, `dev` verbatim on dev builds), with the phase-49 update hint as the sibling segment; on narrow widths the hint shortens to `→ v1.9.0` so the header never wraps. Promoted from the Post-1.0 candidate list; `tui.Options.Version` is already plumbed (Phase 49). TUI internals ⇒ PATCH. **Shipped in v1.8.2** (verified by the maintainer on both build shapes: `dev` verbatim on a plain build, version + hint on an ldflag-injected one). depends_on [].
 - **Phase 50** — self-update (done, `[x]`): `portato update apply [--yes|--force|--dry-run]` — download the GOOS/GOARCH archive, SHA256-verify against `checksums.txt`, atomic swap with a one-level `portato.old` rollback; package-managed installs (brew/scoop/deb/rpm/apk/go install) are detected and refused in place, printing the channel's own upgrade command (Windows Scoop/SCM included — the Phase-47 `current`-junction is never desynced); a live daemon is detected and prompted to restart. Windows direct installs swap via a staged `portato.new` completed at the next launch (pre-cobra, the Phase-47 precedent). **Shipped in v1.8.0**, with the same-day GO-2026-6303 x/crypto fix as v1.8.1; verified live twice — the brew channel defers to `brew upgrade` with the exact command, and a v1.8.1 direct install self-updated to v1.8.3 (the GO-2026-6354 round) in one apply. depends_on [49].
+- **Phase 52** — Editor round-trip integrity + missing fields (pending, `[ ]`): the editor keeps the source `config.Tuber` and overlays the form on save, so it can no longer silently drop fields it has no input for — today every save erases `socks5_user`/`socks5_password` (rewritten as `""`, dropping a `dynamic` tuber's proxy to NoAuth) and `password_auth: false` (the key disappears, reverting to on-by-default); both `e` and `Shift+C` trigger it, and the daemon persist path shares `ReplaceTuberNode`. The same phase exposes the currently-unreachable fields (`jump`, `socks5_*`, `password_auth`) in the editor; regression tests go through the real YAML persist path. depends_on [].
+- **Phase 53** — CLI tuber CRUD `add`/`set`/`rm` (pending, `[ ]`): cobra commands over the already-existing `client.AddTuber/UpdateTuber/DeleteTuber` IPC and the comment-preserving persist — tunnel management without the TUI (CI, Ansible, dotfiles). `set` is read-modify-persist, never a rebuild from flags. depends_on [].
+- **Phase 54** — `status`/`wait` + machine-readable exit codes (pending, `[ ]`): `portato status <name>` answers health in the exit code (0 connected / 1 error / 2 off / …), `wait --timeout` blocks for CI and systemd `ExecStartPost`, plus `doctor --json` and a machine-readable `update check` with distinct verdict codes; the exit-code table becomes documented CLI contract. depends_on [].
+- **Phase 55** — Metadata-only refresh (pending, `[ ]`): promoted from the candidate list (item 6) — a tags-only edit routes through `UpdateMetadata` (cfg + notify, no restart) instead of a full `Reconfigure`, so live tag edits stop blipping connected tunnels; `Status().Tags` stays fresh. depends_on [].
+- **Phase 56** — Port preflight + `local: 0` auto port (pending, `[ ]`): the busy-local-port error is caught at enable time (not post-factum via the reconnect loop), `local: 0` binds an ephemeral free port and reports the actual value in `Status`, and the phase-39 duplicate auto-bump is lifted out of the TUI into a shared helper. depends_on [].
+- **Phase 57** — Engine foundation (pending, `[ ]`): no user-visible change — unify the duplicated `run()`/`runRemote()` reconnect loops into one driver (parity-tested), and give the change event a typed payload (name, old/new state, error) instead of today's bare `struct{}{}` that forces every consumer to re-`List()`. The prerequisite layer for 58–59. depends_on [].
+- **Phase 58** — Fast reconnect on wake / network change (pending, `[ ]`): wall-clock-jump detection in the keepalive ticker (sleep ⇒ immediate reconnect + backoff reset), backoff jitter (the first failed-dial pause is 2s, not 1s — `attempt++` precedes `nextBackoff`), configurable `keepalive_interval`/`connect_timeout`. depends_on [57].
+- **Phase 59** — State-change hooks + notifications (pending, `[ ]`): promoted from the candidate list (item 4) — per-tuber `on_connect:`/`on_error:` commands (env-var context, no shell, timeout, never fatal) and desktop notifications, fired on state transitions with an anti-flap cooldown, on 57's typed event. depends_on [57].
 
 ## Current work
 
