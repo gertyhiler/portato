@@ -1,7 +1,7 @@
 ---
 phase: 52
 title: "Editor round-trip integrity + missing fields"
-status: todo
+status: in-progress
 depends_on: []
 ---
 
