@@ -1,7 +1,7 @@
 ---
 phase: 52
 title: "Editor round-trip integrity + missing fields"
-status: in-progress
+status: done
 depends_on: []
 ---
 
@@ -27,10 +27,10 @@ Triggers: `e` (edit) and `Shift+C` (duplicate, `update.go:658`) — opening and 
 
 ## Definition of Done
 
-- [ ] Saving an edit (`e`) with no changes leaves a tuber carrying `password_auth: false`, `socks5_user`, `socks5_password` intact in config.yaml (asserted via re-load, not a fake controller).
-- [ ] `Shift+C` on that tuber produces a copy retaining all three fields.
-- [ ] The editor exposes `jump`, `socks5_user`, `socks5_password`, `password_auth`, and a save round-trips them.
-- [ ] `make fmt && make vet && make test && make lint` clean.
+- [x] Saving an edit (`e`) with no changes leaves a tuber carrying `password_auth: false`, `socks5_user`, `socks5_password` intact in config.yaml (asserted via re-load, not a fake controller).
+- [x] `Shift+C` on that tuber produces a copy retaining all three fields.
+- [x] The editor exposes `jump`, `socks5_user`, `socks5_password`, `password_auth`, and a save round-trips them.
+- [x] `make fmt && make vet && make test && make lint` clean.
 
 ## Verification
 
