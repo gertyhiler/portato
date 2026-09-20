@@ -58,6 +58,52 @@ func TestLocal_UnknownTuberErrors(t *testing.T) {
 	_ = l.Close()
 }
 
+// TestLocal_UpdateTuber_UnchangedKeepsAuthFields pins the Phase 52 DoD: an
+// unchanged editor-style save (same tuber struct the loaded config produced)
+// round-trips through the real YAML file without erasing socks5 credentials,
+// an explicit password_auth: false, a jump chain or tags.
+func TestLocal_UpdateTuber_UnchangedKeepsAuthFields(t *testing.T) {
+	body := "defaults:\n  identity: ~/.ssh/id_ed25519\ntubers:\n" +
+		"  - name: dyn\n    type: dynamic\n    local: \"10800\"\n    ssh: user@127.0.0.1:2222\n    enabled: false\n    socks5_user: alice\n    socks5_password: s3cret\n" +
+		"  - name: keyonly\n    type: local\n    local: \"19993\"\n    remote: 127.0.0.1:5432\n    ssh: user@127.0.0.1:2222\n    enabled: false\n    jump: bastion:22\n    password_auth: false\n    tags: [prod]\n"
+	p := writeConfigFile(t, body)
+	cfg := mustLoad(t, p)
+	l := NewLocal(cfg, p, nil, nil)
+	defer l.Close()
+
+	for _, tb := range cfg.Tubers {
+		if err := l.UpdateTuber(tb.Name, tb); err != nil {
+			t.Fatalf("UpdateTuber(%s): %v", tb.Name, err)
+		}
+	}
+
+	after, err := config.Load(p)
+	if err != nil {
+		t.Fatalf("re-Load: %v", err)
+	}
+	var dyn, keyonly *config.Tuber
+	for i := range after.Tubers {
+		switch after.Tubers[i].Name {
+		case "dyn":
+			dyn = &after.Tubers[i]
+		case "keyonly":
+			keyonly = &after.Tubers[i]
+		}
+	}
+	if dyn == nil || keyonly == nil {
+		t.Fatalf("tubers lost: %+v", after.Tubers)
+	}
+	if dyn.Socks5User != "alice" || dyn.Socks5Password != "s3cret" {
+		t.Errorf("socks5 credentials erased: user=%q pass=%q", dyn.Socks5User, dyn.Socks5Password)
+	}
+	if keyonly.PasswordAuth == nil || *keyonly.PasswordAuth {
+		t.Errorf("password_auth: false erased: %v", keyonly.PasswordAuth)
+	}
+	if keyonly.Jump != "bastion:22" || len(keyonly.Tags) != 1 || keyonly.Tags[0] != "prod" {
+		t.Errorf("jump/tags erased: jump=%q tags=%v", keyonly.Jump, keyonly.Tags)
+	}
+}
+
 func TestLocal_ReloadAddsTuber(t *testing.T) {
 	p := writeConfigFile(t, "defaults:\n  identity: ~/.ssh/id_ed25519\ntubers:\n"+oneTuber)
 	cfg := mustLoad(t, p)

@@ -15,25 +15,29 @@ import (
 // first sub-model in the TUI: the main Model holds a *tuberEditor (nil when
 // inactive) and routes keys to it while it is open.
 //
-// The form edits the persistent fields only (name, type, ssh, local, remote,
-// identity). Enabled is carried through unchanged from the edited tuber (or
+// The form overlays its inputs on src (the tuber the editor was opened on),
+// so any config field without a form input survives the save by construction
+// (Phase 52). Enabled is carried through unchanged from the edited tuber (or
 // false for a new one) — it stays controlled by the space toggle in the list.
-// Passwords are never in the form: authentication is agent/identity only.
 type tuberEditor struct {
 	mode     editorMode
-	original string  // name being edited ("" for new); used for rename + uniqueness
-	enabled  bool    // preserved from the edited tuber
-	jump     string  // preserved from the edited tuber (Phase 43: not exposed as a field)
-	pal      palette // resolved styles (Phase 37); Model overrides at open time
+	original string       // name being edited ("" for new); used for rename + uniqueness
+	src      config.Tuber // the source tuber; non-form fields survive the save via overlay
+	enabled  bool         // preserved from the edited tuber
+	pal      palette      // resolved styles (Phase 37); Model overrides at open time
 
-	name     textinput.Model
-	ssh      textinput.Model
-	local    textinput.Model
-	remote   textinput.Model
-	identity textinput.Model
-	tags     textinput.Model
+	name       textinput.Model
+	ssh        textinput.Model
+	local      textinput.Model
+	remote     textinput.Model
+	identity   textinput.Model
+	jump       textinput.Model
+	socks5User textinput.Model
+	socks5Pass textinput.Model
+	tags       textinput.Model
 
-	typeIdx int // index into tuberTypes
+	typeIdx         int // index into tuberTypes
+	passwordAuthIdx int // index into passwordAuthStates
 
 	focus  int
 	width  int
@@ -58,6 +62,18 @@ const (
 
 var tuberTypes = []string{"local", "remote", "dynamic"}
 
+// passwordAuth cycling mirrors the tri-state config field (Phase 35):
+// absent = inherit the on-by-default behaviour, true = explicitly on,
+// false = opt this tunnel out of the password fallback entirely.
+const (
+	passwordAuthInherit = iota
+	passwordAuthOn
+	passwordAuthOff
+	passwordAuthCount
+)
+
+var passwordAuthLabels = [...]string{"inherit (on)", "on", "off"}
+
 const (
 	fName = iota
 	fType
@@ -65,6 +81,10 @@ const (
 	fLocal
 	fRemote
 	fIdentity
+	fJump
+	fSocks5User
+	fSocks5Pass
+	fPasswordAuth
 	fTags
 	fieldCount
 )
@@ -75,8 +95,8 @@ func newTuberEditor(mode editorMode, t config.Tuber, existing []string, ctrl con
 	e := &tuberEditor{
 		mode:     mode,
 		original: t.Name,
+		src:      t,
 		enabled:  t.Enabled,
-		jump:     t.Jump,
 		existing: existing,
 		ctrl:     ctrl,
 		focus:    fName,
@@ -88,6 +108,9 @@ func newTuberEditor(mode editorMode, t config.Tuber, existing []string, ctrl con
 	e.local = newInput(t.Local, "5432 or 127.0.0.1:5432", e.pal.body)
 	e.remote = newInput(t.Remote, "db:5432", e.pal.body)
 	e.identity = newInput(t.Identity, "~/.ssh/id_ed25519 (optional)", e.pal.body)
+	e.jump = newInput(t.Jump, "bastion:22 or user@b1:22,user@b2:22 (optional)", e.pal.body)
+	e.socks5User = newInput(t.Socks5User, "user (dynamic only, overrides defaults)", e.pal.body)
+	e.socks5Pass = newInput(t.Socks5Password, "password (dynamic only, overrides defaults)", e.pal.body)
 	e.tags = newInput(strings.Join(t.Tags, ", "), "prod, db (optional, comma-separated)", e.pal.body)
 
 	e.typeIdx = 0
@@ -95,6 +118,14 @@ func newTuberEditor(mode editorMode, t config.Tuber, existing []string, ctrl con
 		if ty == t.Type {
 			e.typeIdx = i
 			break
+		}
+	}
+	e.passwordAuthIdx = passwordAuthInherit
+	if t.PasswordAuth != nil {
+		if *t.PasswordAuth {
+			e.passwordAuthIdx = passwordAuthOn
+		} else {
+			e.passwordAuthIdx = passwordAuthOff
 		}
 	}
 	e.applyTypePlaceholders()
@@ -105,6 +136,7 @@ func newTuberEditor(mode editorMode, t config.Tuber, existing []string, ctrl con
 // the form reflects each type's semantics (e.g. a -R remote may be a bare
 // port that binds loopback on the host).
 func (e *tuberEditor) applyTypePlaceholders() {
+	dyn := tuberTypes[e.typeIdx] == "dynamic"
 	switch tuberTypes[e.typeIdx] {
 	case "remote":
 		e.remote.Placeholder = "9090 or 0.0.0.0:9090"
@@ -115,6 +147,13 @@ func (e *tuberEditor) applyTypePlaceholders() {
 	case "dynamic":
 		e.local.Placeholder = "1080 or 127.0.0.1:1080"
 		e.remote.Placeholder = "unused"
+	}
+	if dyn {
+		e.socks5User.Placeholder = "user (overrides defaults)"
+		e.socks5Pass.Placeholder = "password (overrides defaults)"
+	} else {
+		e.socks5User.Placeholder = "(dynamic only)"
+		e.socks5Pass.Placeholder = "(dynamic only)"
 	}
 }
 
@@ -197,6 +236,14 @@ func (e *tuberEditor) handleKey(k tea.KeyPressMsg) tea.Cmd {
 			}
 			return nil
 		}
+		if e.focus == fPasswordAuth {
+			if k.String() == "left" {
+				e.cyclePasswordAuth(-1)
+			} else {
+				e.cyclePasswordAuth(1)
+			}
+			return nil
+		}
 	}
 	if ti := e.textInputFor(e.focus); ti != nil {
 		var cmd tea.Cmd
@@ -218,6 +265,12 @@ func (e *tuberEditor) textInputFor(idx int) *textinput.Model {
 		return &e.remote
 	case fIdentity:
 		return &e.identity
+	case fJump:
+		return &e.jump
+	case fSocks5User:
+		return &e.socks5User
+	case fSocks5Pass:
+		return &e.socks5Pass
 	case fTags:
 		return &e.tags
 	}
@@ -240,18 +293,36 @@ func (e *tuberEditor) cycleType(dir int) {
 	e.applyTypePlaceholders()
 }
 
+func (e *tuberEditor) cyclePasswordAuth(dir int) {
+	e.passwordAuthIdx = (e.passwordAuthIdx + dir + passwordAuthCount) % passwordAuthCount
+}
+
+// tuber overlays the form inputs on src (the tuber the editor was opened on)
+// so that config fields without a form input survive the save by construction.
 func (e *tuberEditor) tuber() config.Tuber {
-	return config.Tuber{
-		Name:     e.name.Value(),
-		Type:     tuberTypes[e.typeIdx],
-		SSH:      e.ssh.Value(),
-		Local:    e.local.Value(),
-		Remote:   e.remote.Value(),
-		Identity: e.identity.Value(),
-		Enabled:  e.enabled,
-		Jump:     e.jump,
-		Tags:     parseEditorTags(e.tags.Value()),
+	t := e.src
+	t.Name = e.name.Value()
+	t.Type = tuberTypes[e.typeIdx]
+	t.SSH = e.ssh.Value()
+	t.Local = e.local.Value()
+	t.Remote = e.remote.Value()
+	t.Identity = e.identity.Value()
+	t.Jump = e.jump.Value()
+	t.Socks5User = e.socks5User.Value()
+	t.Socks5Password = e.socks5Pass.Value()
+	switch e.passwordAuthIdx {
+	case passwordAuthOn:
+		v := true
+		t.PasswordAuth = &v
+	case passwordAuthOff:
+		v := false
+		t.PasswordAuth = &v
+	default:
+		t.PasswordAuth = nil
 	}
+	t.Enabled = e.enabled
+	t.Tags = parseEditorTags(e.tags.Value())
+	return t
 }
 
 // parseEditorTags splits the comma-separated tags input into a clean []string:
@@ -354,6 +425,10 @@ func (e *tuberEditor) view() string {
 	b.WriteString(e.renderText("Local", &e.local, fLocal, "local"))
 	b.WriteString(e.renderText("Remote", &e.remote, fRemote, "remote"))
 	b.WriteString(e.renderText("Identity", &e.identity, fIdentity, "identity"))
+	b.WriteString(e.renderText("Jump", &e.jump, fJump, "jump"))
+	b.WriteString(e.renderText("Socks5User", &e.socks5User, fSocks5User, "socks5_user"))
+	b.WriteString(e.renderText("Socks5Pass", &e.socks5Pass, fSocks5Pass, "socks5_password"))
+	b.WriteString(e.renderPasswordAuth())
 	b.WriteString(e.renderText("Tags", &e.tags, fTags, "tags"))
 	b.WriteString("\n")
 
@@ -389,6 +464,23 @@ func (e *tuberEditor) renderType() string {
 		lab = e.pal.dim.Render(lab)
 	}
 	val := tuberTypes[e.typeIdx]
+	if focused {
+		val = e.pal.cursor.Render(val) + "  " + e.pal.dim.Render("←/→")
+	} else {
+		val = e.pal.dim.Render(val)
+	}
+	return lab + " " + val + "\n"
+}
+
+func (e *tuberEditor) renderPasswordAuth() string {
+	focused := e.focus == fPasswordAuth
+	lab := fmt.Sprintf("%-9s", "PassAuth:")
+	if focused {
+		lab = e.pal.editorLabel.Render(lab)
+	} else {
+		lab = e.pal.dim.Render(lab)
+	}
+	val := passwordAuthLabels[e.passwordAuthIdx]
 	if focused {
 		val = e.pal.cursor.Render(val) + "  " + e.pal.dim.Render("←/→")
 	} else {

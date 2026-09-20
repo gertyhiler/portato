@@ -333,6 +333,160 @@ func TestEditor_TagsPrefillAndCarryThrough(t *testing.T) {
 	}
 }
 
+// TestEditor_SaveEdit_PreservesNonFormFields pins the Phase 52 overlay: a tuber
+// carrying password_auth: false, socks5 credentials and a jump chain keeps all
+// of them through an edit that touches another field.
+func TestEditor_SaveEdit_PreservesNonFormFields(t *testing.T) {
+	f := newFake()
+	f.cfg = &config.Config{
+		Tubers: []config.Tuber{
+			{
+				Name: "db", Type: "local", Local: "5432", Remote: "db:5432", SSH: "u@h:22",
+				Jump: "bastion:22", Socks5User: "alice", Socks5Password: "s3cret",
+				PasswordAuth: bp(false),
+			},
+		},
+	}
+	e := newTuberEditor(modeEdit, f.cfg.Tubers[0], []string{"db"}, f)
+	e.local.SetValue("9999")
+
+	e.handleKey(keyPress("ctrl+s"))
+
+	if !e.saved || !e.done {
+		t.Fatalf("expected saved+done, status=%q errs=%v", e.status, e.errs)
+	}
+	if len(f.updates) != 1 {
+		t.Fatalf("updates = %+v", f.updates)
+	}
+	got := f.updates[0]
+	if got.Local != "9999" {
+		t.Errorf("edited field not applied: local=%q", got.Local)
+	}
+	if got.Jump != "bastion:22" || got.Socks5User != "alice" || got.Socks5Password != "s3cret" {
+		t.Errorf("overlay fields wiped: jump=%q socks5_user=%q socks5_password=%q", got.Jump, got.Socks5User, got.Socks5Password)
+	}
+	if got.PasswordAuth == nil || *got.PasswordAuth {
+		t.Errorf("password_auth: false not preserved: %v", got.PasswordAuth)
+	}
+}
+
+// TestEditor_SaveNewDuplicateKeepsCredentials pins the Shift+C path: the
+// duplicate editor opens in create mode prefilled from the source tuber, and
+// the credentials must land in the AddTuber call (Phase 52).
+func TestEditor_SaveNewDuplicateKeepsCredentials(t *testing.T) {
+	f := newFake()
+	f.cfg = &config.Config{
+		Tubers: []config.Tuber{
+			{
+				Name: "db", Type: "local", Local: "5432", Remote: "db:5432", SSH: "u@h:22",
+				Socks5User: "alice", Socks5Password: "s3cret",
+			},
+		},
+	}
+	src := f.cfg.Tubers[0]
+	src.Name = "db-copy"
+	src.Enabled = false
+	src.Local = "5433"
+	e := newTuberEditor(modeNew, src, []string{"db"}, f)
+
+	e.handleKey(keyPress("ctrl+s"))
+
+	if !e.saved || !e.done {
+		t.Fatalf("expected saved+done, status=%q errs=%v", e.status, e.errs)
+	}
+	if len(f.adds) != 1 {
+		t.Fatalf("adds = %+v", f.adds)
+	}
+	got := f.adds[0]
+	if got.Name != "db-copy" || got.Local != "5433" {
+		t.Errorf("duplicate identity wrong: %+v", got)
+	}
+	if got.Socks5User != "alice" || got.Socks5Password != "s3cret" {
+		t.Errorf("socks5 credentials wiped on duplicate: %+v", got)
+	}
+}
+
+// TestEditor_PasswordAuthTriState pins the ←/→ cycling and the mapping
+// between the editor state and the tri-state config field.
+func bp(b bool) *bool { return &b }
+
+func TestEditor_PasswordAuthTriState(t *testing.T) {
+	f := newEditorFake()
+
+	mk := func(pa *bool) *tuberEditor {
+		return newTuberEditor(modeNew, config.Tuber{PasswordAuth: pa}, []string{}, f)
+	}
+
+	if e := mk(nil); e.passwordAuthIdx != passwordAuthInherit {
+		t.Errorf("nil -> idx %d, want inherit", e.passwordAuthIdx)
+	}
+	if e := mk(bp(true)); e.passwordAuthIdx != passwordAuthOn {
+		t.Errorf("true -> idx %d, want on", e.passwordAuthIdx)
+	}
+	if e := mk(bp(false)); e.passwordAuthIdx != passwordAuthOff {
+		t.Errorf("false -> idx %d, want off", e.passwordAuthIdx)
+	}
+
+	e := mk(bp(false))
+	if got := e.tuber().PasswordAuth; got == nil || *got {
+		t.Errorf("off round-trip: %v", got)
+	}
+	e.cyclePasswordAuth(-1)
+	if got := e.tuber().PasswordAuth; got == nil || !*got {
+		t.Errorf("on round-trip: %v", got)
+	}
+	e.cyclePasswordAuth(-1)
+	if got := e.tuber().PasswordAuth; got != nil {
+		t.Errorf("inherit round-trip: %v", got)
+	}
+
+	e.focus = fPasswordAuth
+	e.handleKey(keyPress("left"))
+	if e.passwordAuthIdx != passwordAuthOff {
+		t.Errorf("left on PassAuth should cycle to off, idx=%d", e.passwordAuthIdx)
+	}
+}
+
+// TestEditor_NewFieldsPrefill pins the Phase 52 inputs: jump and the socks5
+// pair are prefilled from the source tuber.
+func TestEditor_NewFieldsPrefill(t *testing.T) {
+	f := newFake()
+	f.cfg = &config.Config{
+		Tubers: []config.Tuber{
+			{
+				Name: "db", Type: "local", Local: "5432", Remote: "db:5432", SSH: "u@h:22",
+				Jump: "b1:22,u@b2:22", Socks5User: "alice", Socks5Password: "s3cret",
+			},
+		},
+	}
+	e := newTuberEditor(modeEdit, f.cfg.Tubers[0], []string{"db"}, f)
+	if got := e.jump.Value(); got != "b1:22,u@b2:22" {
+		t.Errorf("jump prefill = %q", got)
+	}
+	if got := e.socks5User.Value(); got != "alice" {
+		t.Errorf("socks5_user prefill = %q", got)
+	}
+	if got := e.socks5Pass.Value(); got != "s3cret" {
+		t.Errorf("socks5_password prefill = %q", got)
+	}
+}
+
+// TestEditor_EditedFieldsWinOverOverlay pins the overlay direction: form
+// values replace src values, not the other way round.
+func TestEditor_EditedFieldsWinOverOverlay(t *testing.T) {
+	f := newFake()
+	f.cfg = &config.Config{
+		Tubers: []config.Tuber{
+			{Name: "db", Type: "local", Local: "5432", Remote: "db:5432", SSH: "u@h:22", Jump: "old:22"},
+		},
+	}
+	e := newTuberEditor(modeEdit, f.cfg.Tubers[0], []string{"db"}, f)
+	e.jump.SetValue("new:2222")
+	if got := e.tuber().Jump; got != "new:2222" {
+		t.Errorf("form jump must win: %q", got)
+	}
+}
+
 func TestEditor_TagsParseDedupAndTrim(t *testing.T) {
 	cases := []struct {
 		in   string

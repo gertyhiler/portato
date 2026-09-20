@@ -20,10 +20,10 @@ Triggers: `e` (edit) and `Shift+C` (duplicate, `update.go:658`) — opening and 
 
 ## Tasks
 
-- [ ] Overlay model: `tuberEditor` keeps the source `config.Tuber`; `tuber()` returns a copy with the form fields overlaid, so non-form fields survive by construction.
-- [ ] Expose `jump` (comma-chain text input), `socks5_user`/`socks5_password` (relevant for `type: dynamic`), `password_auth` (toggle) in the editor form, with focus order and validation.
-- [ ] Regression tests through the real YAML persist path (load → editor save → persist → re-load) asserting the three fields survive an unchanged save; both triggers (`e` and `Shift+C`).
-- [ ] Config-level test: `ReplaceTuberNode` with `PasswordAuth`/`Socks5User`/`Socks5Password` set round-trips them (covers both the local and the daemon persist paths).
+- [x] Overlay model: `tuberEditor` keeps the source `config.Tuber`; `tuber()` returns a copy with the form fields overlaid, so non-form fields survive by construction.
+- [x] Expose `jump` (comma-chain text input), `socks5_user`/`socks5_password` (relevant for `type: dynamic`), `password_auth` (toggle) in the editor form, with focus order and validation.
+- [x] Regression tests through the real YAML persist path (load → editor save → persist → re-load) asserting the three fields survive an unchanged save; both triggers (`e` and `Shift+C`).
+- [x] Config-level test: `ReplaceTuberNode` with `PasswordAuth`/`Socks5User`/`Socks5Password` set round-trips them (covers both the local and the daemon persist paths).
 
 ## Definition of Done
 

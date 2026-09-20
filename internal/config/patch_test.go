@@ -76,6 +76,88 @@ func TestAddTuberNode_AppendsAndPreservesComments(t *testing.T) {
 	}
 }
 
+func TestReplaceTuberNode_RoundTripsAuthFields(t *testing.T) {
+	fixture := `# top-of-file comment
+defaults:
+  identity: ~/.ssh/id_ed25519
+tubers:
+  - name: dyn
+    type: dynamic
+    local: "1080"
+    ssh: deploy@bastion:22
+    enabled: false
+    socks5_user: alice
+    socks5_password: s3cret
+  - name: keyonly
+    type: local
+    local: "5432"
+    remote: db:5432
+    ssh: deploy@bastion:22
+    enabled: false
+    jump: bastion:22
+    password_auth: false
+    tags: [prod]
+`
+	p := writeTmpConfig(t, fixture)
+	c, err := Load(p)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	for _, name := range []string{"dyn", "keyonly"} {
+		var src Tuber
+		for _, tb := range c.Tubers {
+			if tb.Name == name {
+				src = tb
+			}
+		}
+		if err := ReplaceTuberNode(p, name, src); err != nil {
+			t.Fatalf("ReplaceTuberNode(%s): %v", name, err)
+		}
+	}
+
+	c2, err := Load(p)
+	if err != nil {
+		t.Fatalf("re-Load: %v", err)
+	}
+	byName := map[string]*Tuber{}
+	for i := range c2.Tubers {
+		byName[c2.Tubers[i].Name] = &c2.Tubers[i]
+	}
+	dyn, keyonly := byName["dyn"], byName["keyonly"]
+	if dyn == nil || keyonly == nil {
+		t.Fatalf("tubers lost: %+v", c2.Tubers)
+	}
+	assertAuthFieldsIntact(t, dyn, keyonly)
+
+	data, _ := os.ReadFile(p)
+	out := string(data)
+	for _, want := range []string{
+		"# top-of-file comment",
+		"socks5_user: alice",
+		"socks5_password: s3cret",
+		"password_auth: false",
+		"jump: bastion:22",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output missing %q\n%s", want, out)
+		}
+	}
+}
+
+func assertAuthFieldsIntact(t *testing.T, dyn, keyonly *Tuber) {
+	t.Helper()
+	if dyn.Socks5User != "alice" || dyn.Socks5Password != "s3cret" {
+		t.Errorf("socks5 credentials not round-tripped: user=%q pass=%q", dyn.Socks5User, dyn.Socks5Password)
+	}
+	if keyonly.PasswordAuth == nil || *keyonly.PasswordAuth {
+		t.Errorf("password_auth: false not round-tripped: %v", keyonly.PasswordAuth)
+	}
+	if keyonly.Jump != "bastion:22" {
+		t.Errorf("jump not round-tripped: %q", keyonly.Jump)
+	}
+}
+
 func TestAddTuberNode_CreatesTubersSequence(t *testing.T) {
 	p := writeTmpConfig(t, "defaults:\n  identity: ~/.ssh/id\n")
 	added := Tuber{Name: "solo", Type: "local", Local: "1", Remote: "h:1", SSH: "u@h:22"}
