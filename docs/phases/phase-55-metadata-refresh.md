@@ -1,7 +1,7 @@
 ---
 phase: 55
 title: "Metadata-only refresh (tags edits don't reconnect)"
-status: in-progress
+status: done
 depends_on: []
 ---
 
@@ -21,9 +21,9 @@ ROADMAP post-1.0 item 6, promoted. `tuberChanged` (`engine.go:364-390`) compares
 
 ## Definition of Done
 
-- [ ] Editing tags on a connected tuber does not blip the connection (test-asserted: same client, no state transition).
-- [ ] `Status().Tags` reflects the new tags without a reconnect.
-- [ ] `make fmt && make vet && make test && make lint` clean.
+- [x] Editing tags on a connected tuber does not blip the connection (test-asserted: same client, no state transition).
+- [x] `Status().Tags` reflects the new tags without a reconnect.
+- [x] `make fmt && make vet && make test && make lint` clean.
 
 ## Verification
 
