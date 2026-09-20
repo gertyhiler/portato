@@ -1,7 +1,7 @@
 ---
 phase: 55
 title: "Metadata-only refresh (tags edits don't reconnect)"
-status: todo
+status: in-progress
 depends_on: []
 ---
 
