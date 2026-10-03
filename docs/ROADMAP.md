@@ -80,13 +80,13 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` done
 
 ## Current focus
 
-**Phases 52–59 are registered (`[ ]`)** from the September 2026 multi-model
-feature analysis: wave 1 — 52 editor round-trip integrity (fixes a silent
-field-loss bug), 53 CLI CRUD, 54 status/exit codes, 55 metadata-only
-refresh, 56 port preflight; then the engine batch — 57 foundation (unified
-reconnect driver + typed events) gating 58 fast reconnect and 59
-hooks/notifications. Per-tunnel stats is deferred pending real demand (see
-the note at the candidate list).
+**Phases 52–59 are registered from the September 2026 multi-model feature
+analysis.** Done `[x]`: 52 editor round-trip integrity (fixes a silent
+field-loss bug), 53 CLI CRUD (`add`/`set`/`rm`), 55 metadata-only refresh.
+Pending `[ ]`: 54 status/exit codes, 56 port preflight, then the engine
+batch — 57 foundation (unified reconnect driver + typed events) gating 58
+fast reconnect and 59 hooks/notifications. Per-tunnel stats is deferred
+pending real demand (see the note at the candidate list).
 
 **Phases 0–51 are all `[x]`.** The last one to close was 51 (TUI header
 version segment): the running version next to `mode:`, with the phase-49
@@ -246,7 +246,31 @@ is deferred (per-tunnel stats — see its note).
 
 ## Current work
 
-**Phases 0–51 are all `[x]`.** The most recent batch:
+**Phases 0–55: all `[x]` except the registered 54 and 56–59 (`[ ]`).** The
+most recent batch:
+
+- **Phase 55** — metadata-only refresh: a tags-only edit routes through the
+  new `Tuber.UpdateMetadata` (swap cfg + defaults in place, notify, no
+  restart, no state transition) instead of a full `Reconfigure`, so live tag
+  edits stop blipping connected tunnels; `Status().Tags` stays fresh through
+  the metadata path (promoted from the candidate list, item 6).
+
+- **Phase 53** — CLI tuber CRUD: `portato add` / `set` / `rm` manage tunnels
+  from the shell — no TUI. `set` is read-modify-persist (only the passed
+  flags change; socks5 credentials, `password_auth`, jump and tags carry
+  over — the CLI mirror of the Phase 52 overlay), `--password-auth` is
+  tri-state, `rm` confirms unless `--yes`. A live daemon applies changes
+  over IPC immediately; without one, config.yaml is patched directly and a
+  daemon converges via the Phase 28 watcher.
+
+- **Phase 52** — editor round-trip integrity: the TUI editor overlays its
+  form on the source tuber, so a save can no longer silently drop fields
+  the form has no input for — previously every save erased
+  `socks5_user`/`socks5_password` (a `dynamic` tuber fell back to NoAuth)
+  and `password_auth: false`; both `e` and `Shift+C` triggered it. The
+  previously unreachable fields (`jump`, `socks5_*`, `password_auth` as a
+  `←`/`→` tri-state) are now editable; regression tests go through the real
+  YAML persist path.
 
 - **Phase 51** — TUI header version segment: the running version renders
   next to `mode:` (`mode: attach  v1.8.1`; `dev` verbatim on dev builds),

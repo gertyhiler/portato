@@ -29,12 +29,16 @@ The single binary works in several modes:
 | `portato restart <name>`     | Restart a tunnel                                                    |
 | `portato reload`             | Reload the daemon's config from disk (also auto-reloads on change)  |
 | `portato import [<pattern>…]` | Import forwards from `~/.ssh/config` as disabled tunnels (`--all`, `--dry-run`, `--yes`) |
+| `portato add <name>`        | Create a tunnel in config.yaml from flags (`--type/--ssh/--local/--remote`, `--jump`, `--tags`, `--password-auth`, socks5, `--enabled`) — no TUI needed |
+| `portato set <name>`        | Update only the given fields of a tunnel (everything else carries over untouched) |
+| `portato rm <name>`         | Remove a tunnel (asks unless `--yes`) |
 | `portato stop`               | Stop the running daemon (graceful, via SIGTERM)                     |
 | `portato install`            | Install system autostart (launchd / systemd --user / SCM on Windows)|
 | `portato uninstall`          | Remove system autostart                                             |
 | `portato add-identity <path>`| Cache a passphrase for a passphrase-protected SSH key (OS keyring)  |
 | `portato forget-identity <path>` | Forget a cached identity passphrase                             |
 | `portato doctor`             | Diagnose the setup (config, keys, agent, daemon); `--probe` also checks each server's forwarding permission |
+| `portato update check/consent/apply` | Check for a newer release / manage the background-check consent / SHA-256-verified self-update (package managers get their own upgrade command) |
 | `portato version`            | Print the version                                                   |
 | `portato license`            | Print license information (`--full` prints the full MIT text)       |
 

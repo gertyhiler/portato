@@ -61,6 +61,17 @@ portato restart <name> -> CLI: restart a tunnel
 portato reload         -> CLI: force the running daemon to re-read config.yaml (Phase 28)
 portato stop           -> CLI: gracefully stop the running daemon — SIGTERM via the marker PID (Phase 27)
 
+portato add <name>     -> CLI: create a tuber from flags (type/ssh/local/remote, jump, tags, socks5,
+                           password-auth, enabled). Validates the prospective config, then applies
+                           over IPC to a live daemon or patches config.yaml directly (a daemon
+                           converges via the Phase 28 watcher). Created disabled unless --enabled
+                           (Phase 53)
+portato set <name>     -> CLI: read-modify-persist — only the flags passed change; every other field
+                           (socks5 credentials, password_auth, jump, tags) carries over untouched,
+                           the CLI mirror of the Phase 52 editor overlay (Phase 53)
+portato rm <name>      -> CLI: remove a tuber (confirm unless --yes); over IPC a running tuber is
+                           stopped immediately, otherwise the file is patched (Phase 53)
+
 portato install        -> install system autostart (launchd / systemd --user)
 portato uninstall      -> remove autostart
 portato add-identity <path>     -> store an SSH identity passphrase in the OS keyring (Phase 19)
@@ -254,24 +265,24 @@ Implementations:
 
 | Method   | Path                              | Action                            |
 |----------|-----------------------------------|-----------------------------------|
-| `GET`    | `/tunnels`                        | list of statuses                  |
-| `POST`   | `/tunnels/{name}/enable`          | enable + persist `enabled=true`   |
-| `POST`   | `/tunnels/{name}/disable`         | disable + persist `enabled=false` |
-| `POST`   | `/tunnels/{name}/restart`         | down + up                         |
+| `GET`    | `/tubers`                        | list of statuses                  |
+| `POST`   | `/tubers/{name}/enable`          | enable + persist `enabled=true`   |
+| `POST`   | `/tubers/{name}/disable`         | disable + persist `enabled=false` |
+| `POST`   | `/tubers/{name}/restart`         | down + up                         |
 | `POST`   | `/reload`                         | re-read the config from disk      |
 | `GET`    | `/events`                         | SSE stream of state-change signals (Phase 9) |
 | `GET`    | `/config`                         | the current config (JSON) — for the TUI editor (Phase 10) |
-| `POST`   | `/tunnels`                        | add a tunnel (validate, persist, reload) — Phase 10 |
-| `PUT`    | `/tunnels/{name}`                 | replace a tunnel (rename allowed) — Phase 10 |
-| `DELETE` | `/tunnels/{name}`                 | remove a tunnel (active one is stopped) — Phase 10 |
+| `POST`   | `/tubers`                        | add a tunnel (validate, persist, reload) — Phase 10 |
+| `PUT`    | `/tubers/{name}`                 | replace a tunnel (rename allowed) — Phase 10 |
+| `DELETE` | `/tubers/{name}`                 | remove a tunnel (active one is stopped) — Phase 10 |
 | `GET`    | `/logs?name=`                     | recent in-memory log entries for a tunnel (Phase 11 TUI logs screen) |
-| `POST`   | `/tunnels/{name}/accept-host`     | append the tunnel's pending unknown-host key + restart (Phase 11 TOFU) |
+| `POST`   | `/tubers/{name}/accept-host`     | append the tunnel's pending unknown-host key + restart (Phase 11 TOFU) |
 | `GET`    | `/healthz`                        | liveness probe (smart-launcher)   |
 
 `GET /events` (Phase 9) is a `text/event-stream`: the daemon subscribes a
 client to the Engine's event broker and writes a signal-only `data: {}` frame
 on every tunnel state change (plus one initial frame on connect and a 15s
-heartbeat comment). The client reacts by re-fetching `GET /tunnels`. This
+heartbeat comment). The client reacts by re-fetching `GET /tubers`. This
 replaces the former 1s polling — an idle attached client issues no periodic
 requests.
 
@@ -284,7 +295,7 @@ directly (no running daemon required), with `-f/--follow`, `-n/--lines`,
 `--since`, `--tuber`, and `--all` (archives).
 
 The Phase 10 config-editing endpoints (`GET /config`, `POST/PUT/DELETE
-/tunnels`) make the daemon the single owner of config writes: an attached TUI
+/tubers`) make the daemon the single owner of config writes: an attached TUI
 never touches the YAML directly, so a custom `--config` path on the daemon is
 respected and concurrent clients cannot race. Persist is comment-preserving
 (the file is edited as a `yaml.Node` tree, so comments on untouched tunnels
@@ -399,6 +410,9 @@ The meaning of `local`/`remote` depends on `type`:
 - Tags are pure grouping metadata — they do not touch the dial path. They flow
   config → `forward.Status.Tags` → IPC, so `list` / `list --json` report them
   and the TUI filters on the live state rather than re-reading config.
+  A tags-only edit is applied as a metadata refresh (`UpdateMetadata` swaps
+  the tuber's config in place and notifies — no restart, no state blip), so
+  live tag editing never reconnects a tunnel (Phase 55).
 - **`--tag` group op:** `enable` / `disable` / `restart` accept `--tag X` (and
   `--tag` TAB-completes the distinct values from `config.yaml`); it resolves
   every tuber whose `Tags` contain `X` (case-insensitive exact) and acts on
@@ -559,6 +573,7 @@ clears the query).
 |----------------|------------------------------|---------------------------------|
 | Editor (`e`/`n`/`C`) | `tab` / `enter`, `shift+tab` | next / previous field     |
 |                | `←` / `→` (on the Type field)| change the tunnel type          |
+|                | `←` / `→` (on the PassAuth field)| cycle password_auth: inherit (on) / on / off |
 |                | `ctrl+s`                     | save                            |
 |                | `esc`                        | cancel                          |
 | Logs (`l`)     | `↑`/`↓`, `j`/`k`, `pgup`/`pgdn` | scroll                       |
@@ -568,6 +583,12 @@ clears the query).
 | Filter (`/`)   | type to filter live; `backspace` edits the query |               |
 |                | `enter`                      | close the input, keep the filter |
 |                | `esc`                        | clear the filter and close      |
+
+The editor edits the full persistent field set — name, type, ssh, local,
+remote, identity, jump, socks5 user/password, password_auth (the `←`/`→`
+tri-state above) and tags — and overlays the form on the source tuber, so a
+config field without a form input (and any future field) survives every
+save by construction (Phase 52).
 
 ### Branding / logo
 
