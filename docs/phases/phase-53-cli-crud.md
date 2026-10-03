@@ -15,11 +15,11 @@ Tuber creation is TUI-only today (or `portato import`). The machinery already ex
 
 ## Tasks
 
-- [ ] `portato add <name> --type local|remote|dynamic --ssh <spec> --local <addr> --remote <addr> [--identity] [--jump] [--tags] [--enabled] [--password-auth] [--socks5-user] [--socks5-pass]` — validate via `config.Validate`, persist, optionally enable.
-- [ ] `portato set <name> [--ssh] [--local] …` — change only the given flags (read-modify-persist, never a full rebuild from flags).
-- [ ] `portato rm <name> [--yes]` — confirm unless `--yes`; stops the tuber if active.
-- [ ] Commands run over the daemon controller when attached (matching `enable`/`disable`/`restart` semantics), local otherwise.
-- [ ] TAB-completion of tuber names for `set`/`rm` (phase-45 pattern).
+- [x] `portato add <name> --type local|remote|dynamic --ssh <spec> --local <addr> --remote <addr> [--identity] [--jump] [--tags] [--enabled] [--password-auth] [--socks5-user] [--socks5-pass]` — validate via `config.Validate`, persist, optionally enable.
+- [x] `portato set <name> [--ssh] [--local] …` — change only the given flags (read-modify-persist, never a full rebuild from flags).
+- [x] `portato rm <name> [--yes]` — confirm unless `--yes`; stops the tuber if active.
+- [x] Commands run over the daemon controller when attached (matching `enable`/`disable`/`restart` semantics), local otherwise.
+- [x] TAB-completion of tuber names for `set`/`rm` (phase-45 pattern).
 
 ## Definition of Done
 
