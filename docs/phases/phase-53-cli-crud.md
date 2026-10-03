@@ -1,7 +1,7 @@
 ---
 phase: 53
 title: "CLI tuber CRUD (add / set / rm)"
-status: in-progress
+status: done
 depends_on: []
 ---
 
@@ -23,10 +23,10 @@ Tuber creation is TUI-only today (or `portato import`). The machinery already ex
 
 ## Definition of Done
 
-- [ ] `portato add demo --type local --ssh me@host:22 --local 8080 --remote 127.0.0.1:80` succeeds, `portato list` shows it, and comments elsewhere in config.yaml survive the persist.
-- [ ] `portato set demo --local 8081` changes only that field.
-- [ ] `portato rm demo --yes` removes it and stops a running tunnel.
-- [ ] `make fmt && make vet && make test && make lint` clean.
+- [x] `portato add demo --type local --ssh me@host:22 --local 8080 --remote 127.0.0.1:80` succeeds, `portato list` shows it, and comments elsewhere in config.yaml survive the persist.
+- [x] `portato set demo --local 8081` changes only that field.
+- [x] `portato rm demo --yes` removes it and stops a running tunnel.
+- [x] `make fmt && make vet && make test && make lint` clean.
 
 ## Verification
 
