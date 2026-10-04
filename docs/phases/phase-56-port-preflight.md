@@ -1,7 +1,7 @@
 ---
 phase: 56
 title: "Port preflight + local: 0 (auto free port)"
-status: in-progress
+status: done
 depends_on: []
 ---
 
@@ -22,9 +22,9 @@ A busy local port surfaces only post-factum as an Error state. The TUI already a
 
 ## Definition of Done
 
-- [ ] Enabling a tuber on a busy port fails fast with the conflict named, without entering the reconnect loop.
-- [ ] `local: 0` works for `local` and `dynamic` types; `portato list` shows the real port.
-- [ ] `make fmt && make vet && make test && make lint` clean.
+- [x] Enabling a tuber on a busy port fails fast with the conflict named, without entering the reconnect loop.
+- [x] `local: 0` works for `local` and `dynamic` types; `portato list` shows the real port.
+- [x] `make fmt && make vet && make test && make lint` clean.
 
 ## Verification
 
