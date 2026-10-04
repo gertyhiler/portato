@@ -31,6 +31,16 @@ type fakeTuber struct {
 	listenerErr  error
 	// adopted records the listener passed to StartWith (nil for a plain Start).
 	adopted net.Listener
+	// livePort drives LiveLocalPort for the Enable preflight tests (0 = no
+	// live listener).
+	livePort int
+}
+
+func (f *fakeTuber) LiveLocalPort() (int, bool) {
+	if f.livePort == 0 {
+		return 0, false
+	}
+	return f.livePort, true
 }
 
 func (f *fakeTuber) Start(ctx context.Context) error {

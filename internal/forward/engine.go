@@ -32,6 +32,9 @@ type tuberer interface {
 	// ErrNoListener when there is nothing to pass (stopped / type=remote).
 	// Drives the standalone->daemon hand-off FD transfer (Phase 16).
 	ListenerFile() (*os.File, error)
+	// LiveLocalPort reports the tuber's bound local-listener port, when it has
+	// one. Drives the Engine.Enable port preflight (Phase 56).
+	LiveLocalPort() (int, bool)
 }
 
 // Engine is a thread-safe manager of a set of tubers derived from a Config.
@@ -148,7 +151,37 @@ func (e *Engine) Enable(name string) error {
 	if !ok {
 		return fmt.Errorf("unknown tuber %q", name)
 	}
+	if err := e.preflightLocalPort(name); err != nil {
+		return err
+	}
 	return tn.Start(e.ctx)
+}
+
+// preflightLocalPort fails fast — with the conflict named — when the tuber's
+// configured local port is already held by another tuber's live listener
+// (Phase 56). An ephemeral local: 0 always passes (the OS assigns a free
+// port); ports held by non-portato processes still surface through the
+// Start-time bind error.
+func (e *Engine) preflightLocalPort(name string) error {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	cfg, ok := e.configs[name]
+	if !ok || cfg.Type == "remote" {
+		return nil
+	}
+	port, ok := config.LocalPort(cfg.Local)
+	if !ok || port == 0 {
+		return nil
+	}
+	for other, tn := range e.tubers {
+		if other == name {
+			continue
+		}
+		if live, ok := tn.LiveLocalPort(); ok && live == port {
+			return fmt.Errorf("local port %d already in use by tuber %q", port, other)
+		}
+	}
+	return nil
 }
 
 func (e *Engine) Disable(name string) error {

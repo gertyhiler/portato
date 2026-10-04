@@ -14,6 +14,8 @@ import (
 
 	"github.com/armon/go-socks5"
 	"github.com/portuber/portato/internal/config"
+	"strconv"
+
 	"golang.org/x/crypto/ssh"
 )
 
@@ -302,13 +304,37 @@ func (t *Tuber) UpdateMetadata(cfg config.Tuber, def config.Defaults) {
 	t.notifyChange()
 }
 
+// LiveLocalPort reports the port of the tuber's bound local listener, when it
+// has one (local/dynamic types bind at Start; type=remote never does). Drives
+// the Engine.Enable port preflight (Phase 56).
+func (t *Tuber) LiveLocalPort() (int, bool) {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	if t.listener == nil {
+		return 0, false
+	}
+	_, port, err := net.SplitHostPort(t.listener.Addr().String())
+	if err != nil {
+		return 0, false
+	}
+	p, err := strconv.Atoi(port)
+	if err != nil || p == 0 {
+		return 0, false
+	}
+	return p, true
+}
+
 func (t *Tuber) Status() Status {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
+	local := t.cfg.ListenAddr()
+	if t.listener != nil {
+		local = t.listener.Addr().String()
+	}
 	return Status{
 		Name:               t.cfg.Name,
 		Type:               t.cfg.Type,
-		Local:              t.cfg.ListenAddr(),
+		Local:              local,
 		Remote:             t.cfg.Remote,
 		State:              t.state,
 		Error:              t.errMsg,

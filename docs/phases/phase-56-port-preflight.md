@@ -15,10 +15,10 @@ A busy local port surfaces only post-factum as an Error state. The TUI already a
 
 ## Tasks
 
-- [ ] Enable-time preflight: probe the local port before starting; a conflict yields a clear error state (naming the conflict where discoverable).
-- [ ] `local: 0` accepted by validation; binds ephemeral; `Status.Local` reports the actual bound port.
-- [ ] Lift the duplicate-port auto-bump out of the TUI into a shared config helper (single implementation).
-- [ ] Tests: conflict detection (bind a port, enable, expect the error state); ephemeral bind reports a real port; two tubers with `local: 0` get distinct ports.
+- [x] Enable-time preflight: probe the local port before starting; a conflict yields a clear error state (naming the conflict where discoverable).
+- [x] `local: 0` accepted by validation; binds ephemeral; `Status.Local` reports the actual bound port.
+- [x] Lift the duplicate-port auto-bump out of the TUI into a shared config helper (single implementation).
+- [x] Tests: conflict detection (bind a port, enable, expect the error state); ephemeral bind reports a real port; two tubers with `local: 0` get distinct ports.
 
 ## Definition of Done
 
