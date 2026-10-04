@@ -5,6 +5,8 @@ status: done
 depends_on: []
 ---
 
+> **Shipped in v1.9.0** (2026-10-04).
+
 ## Goal
 
 Editing a tuber in the TUI never silently drops config fields again: the editor keeps the original `config.Tuber` and overlays the form on top, and the currently-unreachable fields (`jump`, `socks5_user`, `socks5_password`, `password_auth`) become editable.

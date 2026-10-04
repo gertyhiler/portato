@@ -5,6 +5,8 @@ status: done
 depends_on: []
 ---
 
+> **Shipped in v1.9.0** (2026-10-04).
+
 ## Goal
 
 "Address already in use" is caught before a tunnel is enabled, not after; and `local: 0` binds an ephemeral free port, with the actual value reported in `Status`.

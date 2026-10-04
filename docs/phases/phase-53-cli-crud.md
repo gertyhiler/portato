@@ -5,6 +5,8 @@ status: done
 depends_on: []
 ---
 
+> **Shipped in v1.9.0** (2026-10-04).
+
 ## Goal
 
 Tunnels can be created, modified and removed from the shell — `portato add`, `portato set`, `portato rm` — without the TUI. Unlocks CI, Ansible and dotfiles flows.

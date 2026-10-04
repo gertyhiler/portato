@@ -5,6 +5,8 @@ status: done
 depends_on: []
 ---
 
+> **Shipped in v1.9.0** (2026-10-04).
+
 ## Goal
 
 Editing only a tuber's `tags:` no longer reconnects the SSH session: the config reload routes metadata-only changes through an `UpdateMetadata` path (`t.cfg = cfg` + notify, no restart).
