@@ -1,5 +1,9 @@
 # Conventions — the rules for working with phases
 
+> Scope: upstream planning history and workflow, retained for reference.
+> Fork work follows [AGENTS.md](../AGENTS.md) and [ADR-0004](adr/0004-upstream-compatible-layer.md);
+> these phase gates and statuses do not track fork tasks.
+
 This document describes how planning and implementation are organized in the `portato` project. These are the "rules of the game" for the agent and the human.
 
 ## Planning structure

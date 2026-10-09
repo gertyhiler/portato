@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"sync"
 	"time"
@@ -377,6 +378,7 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("DELETE /identities", s.handleForgetIdentity)
 	mux.HandleFunc("POST /reload", s.handleReload)
 	mux.HandleFunc("GET /config", s.handleGetConfig)
+	mux.HandleFunc("GET /info", s.handleInfo)
 	mux.HandleFunc("POST /tubers", s.handleAddTuber)
 	mux.HandleFunc("PUT /tubers/{name}", s.handleUpdateTuber)
 	mux.HandleFunc("DELETE /tubers/{name}", s.handleDeleteTuber)
@@ -973,4 +975,13 @@ func ensureNotRunning(markerPath, socketPath string, activated bool) error {
 		_ = os.Remove(socketPath)
 	}
 	return nil
+}
+
+func (s *Server) handleInfo(w http.ResponseWriter, _ *http.Request) {
+	path, err := filepath.Abs(config.ExpandTilde(s.cfgPath))
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "resolve config path: %v", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"protocol": 1, "config_path": path})
 }

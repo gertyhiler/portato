@@ -8,7 +8,7 @@
 # main pass's @15, so it flags nothing new there; the only NEW catches are
 # _test.go functions >18 — shifted left from CodeFactor to `make lint`.
 #
-# Install:  go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8
+# Install:  make setup (pins v1.64.8 in .tools/bin)
 # Run:      make lint   (runs both .golangci.yml and this file)
 # Note: this is a v1-schema config; it must run under golangci-lint v1.x
 # (v2.0+ uses a different config format), like .golangci.yml.

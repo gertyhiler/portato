@@ -1,0 +1,4 @@
+interface:
+  display_name: "Portato Swift"
+  short_description: "Use portato-swift in this repository"
+  default_prompt: "Use $portato-swift for this request."

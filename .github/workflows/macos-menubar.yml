@@ -1,0 +1,29 @@
+name: macOS menu bar
+
+on:
+  pull_request:
+    paths: ['macos/**', 'scripts/**', '.agents/**', 'internal/**', 'cmd/**', 'go.mod', 'go.sum', 'Makefile', '.bun-version', 'skills-lock.json', '.github/workflows/macos-menubar.yml']
+  push:
+    branches: [main, 'feat/macos-menubar']
+    paths: ['macos/**', 'scripts/**', '.agents/**', 'internal/**', 'cmd/**', 'go.mod', 'go.sum', 'Makefile', '.bun-version', 'skills-lock.json', '.github/workflows/macos-menubar.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+      - run: make setup
+      - run: make doctor
+      - run: make verify
+      - run: make build
+      - run: make test-menubar-smoke

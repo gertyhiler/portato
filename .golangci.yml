@@ -2,7 +2,7 @@
 # (builtin shadowing + high cyclomatic complexity). See
 # docs/phases/phase-33-codefactor-cleanup.md.
 #
-# Install:  go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8
+# Install:  make setup (pins v1.64.8 in .tools/bin)
 # Run:      make lint   (or: golangci-lint run ./...)
 # Note: this is a v1-schema config; it must run under golangci-lint v1.x
 # (v2.0+ uses a different config format).
