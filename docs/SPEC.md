@@ -1,9 +1,9 @@
 # SPEC — `portato` technical specification
 
 > `portato` is an SSH port-forwarding manager with a TUI.
-> The single source of truth for the stack, architecture, and contracts. Changes rarely.
-> The phase workflow is described in [`CONVENTIONS.md`](./CONVENTIONS.md).
-> The phase status lives in [`ROADMAP.md`](./ROADMAP.md).
+> Current Go core contracts, followed by the explicitly marked native-client extension.
+> The historical upstream phase workflow is described in [`CONVENTIONS.md`](./CONVENTIONS.md).
+> Upstream phase status lives in [`ROADMAP.md`](./ROADMAP.md).
 
 ## 1. Goal and scope
 
@@ -25,7 +25,7 @@
 
 | Purpose          | Library                                        |
 |------------------|------------------------------------------------|
-| Language         | Go 1.25+                                        |
+| Language         | As declared in `go.mod`                                        |
 | CLI              | `github.com/spf13/cobra`                       |
 | TUI              | `charm.land/bubbletea/v2` + `charm.land/bubbles/v2` + `charm.land/lipgloss/v2` |
 | SSH              | `golang.org/x/crypto/ssh` + `golang.org/x/crypto/ssh/knownhosts` (native, no system `ssh`) |
@@ -795,3 +795,32 @@ applies anything on its own.
 - How to authenticate to a password-only SSH server (no usable key)? -> **resolved (Phase 35)**: password auth is **on by default** (OpenSSH-style) — when keys don't authenticate, the dial falls back to an interactive password prompt, so existing password-only hosts and servers that switch key→password need no config change. `password_auth: false` opts out (per-tuber or `defaults`). The password is supplied interactively (TUI modal / `POST /tubers/{name}/password` / `controller.AcceptPassword`) and held in an in-memory cache plus, opt-in, the OS keyring (`defaults.ssh_password_store`, keyed by account) — never in config. `golang.org/x/crypto/ssh` does not retry the password method within one handshake, so the re-prompt is a dial-level loop (no backoff, stays `Connecting`); a key-only server bails out cleanly. Keys stay the default and are tried first. See §9.
 - Passing live listener FDs to the new daemon during hand-off (a seamless transition) -> **resolved (Phase 16)**: the standalone dups its local listeners and sends them (SCM_RIGHTS) over a one-shot transfer socket; the daemon adopts them via `net.FileListener`, so the local ports never go down. The SSH session itself is re-dialed (no cross-process resume in `golang.org/x/crypto/ssh`); only local-port availability is seamless. See §12.
 - Windows support -> **resolved (Phase 17, refined in Phase 47)**: IPC over a named pipe (`\\.\pipe\portato` via `go-winio`); autostart via the HKCU registry Run key in Phase 17, superseded by a Service Control Manager service in Phase 47. See §6/§13.
+
+## Fork extension: native macOS menu bar
+
+The fork adds `macos/`, a Swift/AppKit client for the existing daemon IPC.
+The daemon retains exclusive ownership of tunnels; closing the GUI leaves it
+running. The client uses authenticated HTTP over the Unix socket and SSE state
+notifications, re-reading credentials for new requests and reconnecting after
+stream loss. The fork adds authenticated `GET /info` with protocol version 1
+and the actual daemon config path. Native editing uses existing config CRUD routes. A regression found during the live SSH probe is
+fixed in the existing authentication layer: agent and identity-file signers
+are offered in one public-key method, allowing identity fallback after an
+unrelated agent key is rejected.
+
+`make menubar` packages the native executable with the matching Go CLI.
+`make menubar-test` runs portable Swift IPC checks without XCTest.
+See `macos/README.md` and `docs/adr/0001-macos-menu-bar.md`. This extension does not
+change the upstream numbered phase lifecycle or claim upstream acceptance.
+
+The menu starts the bundled daemon once only when its socket is missing or refuses
+connections (configurable). Authentication, protocol and ambiguous transport errors
+are shown without launching a second daemon. It never kills
+an existing daemon, and offers a separate macOS login-item setting via
+SMAppService. The Go login service remains available through install/uninstall.
+SSE plus a five-second refresh synchronizes config/state with CLI and TUI.
+
+The fork adopts Unix Runbook v1.0: see `docs/runbooks/command-contract.md` and
+`docs/runbooks/development.md` for the authoritative Make command mapping.
+Base development uses isolated checkout state; stopping the installed daemon is
+an explicit `daemon-stop` extension. Repository documentation is maintained in English.

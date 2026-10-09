@@ -2,6 +2,8 @@
 
 # Portato
 
+The badges below describe **upstream Portato**, not this fork or its macOS client.
+
 [![CI](https://github.com/portuber/portato/actions/workflows/ci.yml/badge.svg)](https://github.com/portuber/portato/actions/workflows/ci.yml)
 [![security](https://github.com/portuber/portato/actions/workflows/security.yml/badge.svg)](https://github.com/portuber/portato/actions/workflows/security.yml)
 [![Release](https://img.shields.io/github/v/release/portuber/portato)](https://github.com/portuber/portato/releases)
@@ -14,6 +16,21 @@ individual SSH tunnels on and off, restart them, and watch their status from a
 single screen — either running standalone, or attached to a background daemon.
 
 <p align="center"><img src="docs/landing/assets/hero.gif" alt="Portato TUI demo" width="720"></p>
+
+## Fork development
+
+This fork includes a native macOS menu bar client, distributed as source for local
+builds, and adopts Unix Runbook v1.0. No public prebuilt macOS app release is planned.
+Start with `make help`, then `make setup`, `make doctor`, `make verify` and
+`make build`. On macOS, the build includes `dist/Portato Menu Bar.app`; on Linux
+it produces the Go CLI. `make dev` uses checkout-owned configuration, while
+`make daemon-stop` explicitly targets the installed user daemon.
+
+Read the [development runbook](docs/runbooks/development.md),
+[command contract](docs/runbooks/command-contract.md), and
+[macOS guide](macos/README.md). All repository documentation and public tracker
+content is maintained in English. Upstream usage and historical release references
+are preserved below.
 
 The single binary works in several modes:
 
@@ -51,7 +68,9 @@ The single binary works in several modes:
 > `sshd_config`. If a tunnel won't connect, run `portato doctor` first — see
 > [Troubleshooting](#troubleshooting).
 
-All channels are built from the same release for macOS, Linux, and Windows.
+The following channels install **upstream Go Portato**, without this fork’s native
+menu bar client. Build the client using the [macOS guide](macos/README.md).
+Upstream channels are built from the same release for macOS, Linux, and Windows.
 
 **Homebrew** (macOS / Linuxbrew):
 
@@ -229,14 +248,16 @@ auto-installed.
 ## Build
 
 ```sh
-make build   # produces bin/portato
+make build   # Go CLI; also the native app on macOS
 make run     # go run ./cmd/portato
-make test    # go test ./...
+make test    # Go + Bun; also Swift IPC checks on macOS
 make vet     # go vet ./...
 make fmt     # gofmt -w .
 ```
 
-Requires Go 1.26+.
+Aggregate commands require Go, Bun and, on macOS, Apple Command Line Tools. See
+the [development runbook](docs/runbooks/development.md) for exact prerequisites.
+Core-only builds and tests use `go build ./...` and `go test ./...` without Swift or Bun.
 
 ## Releases
 
@@ -606,11 +627,11 @@ daemon, and prints a `✓`/`✗` line per check.
 
 ## Documentation
 
-The source of truth lives in [`docs/`](./docs):
+Start with [AGENTS.md](./AGENTS.md) for document authority and [the documentation index](./docs/README.md):
 
 - [`docs/SPEC.md`](./docs/SPEC.md) — technical specification (stack, architecture, config, IPC, TUI).
-- [`docs/ROADMAP.md`](./docs/ROADMAP.md) — phase status.
-- [`docs/CONVENTIONS.md`](./docs/CONVENTIONS.md) — how phases are planned and implemented.
+- [`docs/ROADMAP.md`](./docs/ROADMAP.md) — historical upstream phase status.
+- [`docs/CONVENTIONS.md`](./docs/CONVENTIONS.md) — the upstream phase workflow, retained as reference.
 
 ## License
 
@@ -621,5 +642,13 @@ binary; third-party notices ship in `THIRD_PARTY_LICENSES.txt`.
 
 ## Versioning
 
-Portato uses [Semantic Versioning](./docs/VERSIONING.md). Releases are tagged
-`vX.Y.Z`.
+Upstream Portato uses [Semantic Versioning](./docs/VERSIONING.md), with `vX.Y.Z`
+tags. This checkout distributes the native client as source; see the
+[release boundary](docs/runbooks/upstream-contributions.md#delivery-and-updates)
+for the local installation and upstream integration policy.
+
+## Native macOS menu bar (fork addition)
+
+This fork adds an AppKit menu bar client alongside the existing CLI and TUI.
+All three use the same daemon. Run `make menubar` to build the app bundle;
+see [macos/README.md](macos/README.md) for setup, checks and limitations.

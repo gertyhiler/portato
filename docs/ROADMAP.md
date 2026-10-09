@@ -1,5 +1,9 @@
 # `portato` — Roadmap
 
+> Scope: upstream planning history and workflow, retained for reference.
+> Fork work follows [AGENTS.md](../AGENTS.md) and [ADR-0004](adr/0004-upstream-compatible-layer.md);
+> these phase gates and statuses do not track fork tasks.
+
 > The summary state of all phases. The statuses are mirrored in the phase files and must match.
 > For the rules on statuses and sequencing see [`CONVENTIONS.md`](./CONVENTIONS.md).
 > For the technical specification see [`SPEC.md`](./SPEC.md).
