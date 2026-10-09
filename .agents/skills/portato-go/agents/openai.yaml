@@ -1,0 +1,4 @@
+interface:
+  display_name: "Portato Go"
+  short_description: "Use portato-go in this repository"
+  default_prompt: "Use $portato-go for this request."

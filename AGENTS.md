@@ -1,108 +1,79 @@
-# AGENTS.md
+# Portato contributor and agent instructions
 
-Briefing for AI agents working on **Portato**. Read this first.
+This repository extends upstream Portato with a native macOS client and optional
+contributor tooling. The Go core remains upstream-compatible. Read the current
+user request, then the documents relevant to the change.
 
-## Project
+## Contracts and authority
 
-Portato — SSH port-forwarding manager with a TUI. One Go binary, several
-modes: smart launcher (`portato`), background daemon (`portato daemon`),
-TUI client (`portato attach`), CLI commands (`list/enable/disable/restart`),
-and autostart (`install/uninstall`). Native SSH via `golang.org/x/crypto/ssh`
-(no system `ssh` dependency).
+- `docs/SPEC.md`: current Go contracts and the explicitly marked client extension.
+- `docs/adr/`: accepted architectural decisions and their rationale. Use sequential
+  `0001-slug.md` names as defined by `.agents/skills/domain-modeling/ADR-FORMAT.md`; update links
+  when renaming. New decisions must identify any decision they supersede.
+- `docs/runbooks/`: exact commands, prerequisites and operational boundaries.
+- `CONTEXT.md`: domain vocabulary, not implementation plans or task status.
+- `docs/agents/issue-tracker.md`: task scope, acceptance criteria and evidence.
+- `docs/ROADMAP.md`, `docs/CONVENTIONS.md` and `docs/phases/`: upstream planning
+  history and workflow. They do not impose phase gates on work in this fork.
 
-Source of truth:
+Current user instructions take precedence over repository process. Skills are
+reusable procedures subordinate to these contracts, not another source of product
+requirements. Surface contradictions before silently replacing an accepted ADR.
 
-- `docs/SPEC.md` — stack, architecture, config, IPC, TUI.
-- `docs/ROADMAP.md` — phase status (the live view).
-- `docs/CONVENTIONS.md` — how phases are planned and implemented.
-- `docs/phases/phase-N-*.md` — per-phase plans and Definition of Done.
+## Upstream-compatible boundaries
 
-Module: `github.com/portuber/portato` (Go 1.26+).
+Keep `github.com/portuber/portato` as the Go module path. Preserve CLI/TUI behavior,
+configuration formats, paths, authentication and service ownership. The Go core
+owns tunnels, secrets and configuration persistence; clients consume its API.
+New IPC endpoints must be additive, authenticated and independently testable.
+See `docs/adr/0004-upstream-compatible-layer.md` and the upstream contribution
+runbook for patch boundaries and release policy.
 
-## Layout
+Keep Swift/AppKit code under `macos/`, contributor scripts under `scripts/`, and
+agent procedures under `.agents/`. Go builds and tests remain usable directly
+without Swift, Bun or agent tooling. Do not add runtime dependencies to the core
+for a client or development workflow.
 
-```
-cmd/portato/      binary entrypoint (cobra root)
-internal/
-  cmd/                cobra commands (root + subcommands)
-  config/             YAML config load/save/validation (phase 1)
-  forward/            tunnel engine, native SSH (phase 2)
-  importer/           ~/.ssh/config forward import (phase 48)
-  fdpass/             SCM_RIGHTS listener transfer for the hand-off (phase 16)
-  controller/         Controller interface + local/remote (phase 3+)
-  secret/             identity passphrase cache + OS keyring (phase 19)
-  daemon/             HTTP server over unix socket (phase 4)
-  client/             HTTP client over unix socket (phase 4)
-  ipctoken/           daemon IPC bearer token (phase 18)
-  tui/                bubbletea UI (phase 3)
-  logo/               version/help logo banner (phase 24)
-  service/            autostart: launchd/systemd (phase 6)
-  log/                slog setup + rotating writer (phase 13)
-  sshtest/            in-process SSH server test fixture (phase 16 E2E)
-```
+## Commands
 
-## Build & verify
+Start with `make help`, `make setup`, and `make doctor`. Use `make verify` for
+checks followed by tests, and `make build` for packaging. On macOS these include
+the native client; on Linux they cover Go and contributor tooling. See
+`docs/runbooks/development.md` for the full Unix Runbook v1.0 mapping.
 
-```
-make build            # -> bin/portato
-make run              # go run ./cmd/portato
-make test             # go test ./...
-make vet              # go vet ./...
-make lint             # golangci-lint run ./... (predeclared + gocyclo@15)
-make fmt              # gofmt -w .
-```
+For core-only work: `go build ./...`, `go test ./...`, and `go vet ./...`.
+`make build-cli` and `make test-go` retain convenient Go-only entry points.
+Use `make fmt` for Go formatting. Run both linter profiles with `make lint` after
+`make setup`. Run relevant runtime checks when changing client/daemon integration.
 
-Run after every change: `make fmt && make vet && make test`. Run `make lint`
-before closing a phase (it guards against builtin shadowing and high
-cyclomatic complexity — the codefactor.io issue classes; requires
-golangci-lint v1.x). Before closing a phase, ensure all of these are clean:
+`make dev` owns an isolated foreground daemon; `make dev-tui` attaches only to
+that daemon. `make stop` never stops the installed user daemon. The explicit
+`daemon-stop`, `install-service` and `reload` extensions affect user services.
 
-- `go build ./...` succeeds;
-- `gofmt -l .` is empty;
-- `go vet ./...` is clean;
-- `golangci-lint run ./...` is clean (i.e. `make lint`);
-- the phase's tests are green, e.g. `go test ./internal/config/... -v`.
+## Skills and documentation
 
-## Phases (GSD)
+Read `.agents/AGENTS.md` for flat skills managed by `npx skills` and the checked-in
+`skills-lock.json`. Route Go work to `portato-go` and native client work to
+`portato-swift`. Use `docs/agents/domain.md`, `issue-tracker.md` and
+`triage-labels.md` with Matt Pocock skills. Preserve external skill payloads.
 
-- Phase statuses are `[ ]` (pending) / `[~]` (in progress) / `[x]` (done), kept
-  **in sync in two places**: the YAML frontmatter of `docs/phases/phase-N-*.md`
-  (`status: todo|in-progress|done`) and the table in `docs/ROADMAP.md`. Update
-  both in a single pass.
-- A phase starts only on an explicit human command ("start phase N"), and only
-  after every phase in its `depends_on` is `[x]`. Only **one** phase may be
-  `[~]` at a time.
-- On "complete phase N": verify every DoD item is actually met, then flip
-  `[~]→[x]`. If something is missing, report it and do **not** mark `[x]`.
-- "Tasks" and "Definition of Done" checklists inside a phase file are
-  independent lists; check them off as the work lands.
+Write repository documentation, runbooks, instructions and public tracker content
+in English. Conversation replies may follow the user's language. Keep small work
+proportionate; a new issue, spec or ADR is not mandatory for every edit.
 
-## Commits
+## Changes and delivery
 
-Follow Conventional Commits — see `docs/CONVENTIONS.md` §Commits for the full
-spec. Quick reference:
+Use Conventional Commits, with a body explaining non-trivial changes. Separate
+core fixes, additive IPC, native client and contributor tooling where each forms
+an independently reviewable change. `docs(phase-N)` commits are for upstream
+phase changes only, not a required lifecycle here.
 
-- `docs(phase-N): start` / `docs(phase-N): complete` — phase lifecycle.
-- `feat(<scope>): …` — implementation within a phase.
-- `docs(<scope>): …` — SPEC / CONVENTIONS / ROADMAP edits.
-- `chore(<scope>): …` — tooling, deps, Makefile.
+Do not commit, push, create tags, publish, merge, deploy or close issues without
+applicable user authorization. Do not rewrite pushed history or change global
+Git configuration. Preserve unrelated work and private local files.
 
-Non-trivial commits include a body: **what changed and why**.
-
-## Operating rules
-
-- **Do not push** to any remote unless explicitly asked. Local commits only.
-- Do not rewrite history that has been pushed. Rewriting local history is OK
-  only when explicitly requested.
-- Do not edit `docs/SPEC.md` silently; if reality diverges from the spec, fix
-  the spec and mention it in the commit. If unsure — ask.
-- Do not change global git config. Local repo config is fine when a task needs it.
-- Do not add comments to code unless asked.
-- Do not pin the current release version in docs (ROADMAP/README/SPEC) — it
-  churns every release. Reference `VERSIONING.md`'s policy or link
-  `/releases/latest`; an exact `vX.Y.Z` lives only in git tags and the per-phase
-  historical "shipped in vX.Y.Z" notes (which are facts, not the current version).
-
-## Current focus
-
-See `docs/ROADMAP.md` — "Current focus" and the phase status table.
+Update affected contracts with behavior changes and report them explicitly.
+Follow surrounding code style; add comments only when requested. Avoid pinning
+current application release versions in general docs; historical versions and
+development toolchain pins are separate. Distinguish local verification, review,
+CI, release and human acceptance in reports.
