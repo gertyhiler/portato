@@ -19,6 +19,9 @@ import (
 )
 
 func TestIdentityAfterUnrelatedAgentKey(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("SSH_AUTH_SOCK regression requires the Unix agent transport")
+	}
 	if runtime.GOOS == "darwin" {
 		t.Setenv("TMPDIR", "/tmp")
 	}
