@@ -1,0 +1,25 @@
+name: Unix runbook
+on:
+  pull_request:
+    paths: ['Makefile', '.bun-version', 'skills-lock.json', 'scripts/**', '.agents/**', 'go.mod', 'go.sum', '.github/workflows/unix-runbook.yml']
+  push:
+    branches: [main, 'feat/macos-menubar']
+    paths: ['Makefile', '.bun-version', 'skills-lock.json', 'scripts/**', '.agents/**', 'go.mod', 'go.sum', '.github/workflows/unix-runbook.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+      - run: make setup
+      - run: make doctor
+      - run: make -j4 verify
+      - run: make build

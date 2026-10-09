@@ -1,12 +1,105 @@
+.DEFAULT_GOAL := help
+LINT := $(CURDIR)/.tools/bin/golangci-lint
+
+.PHONY: help doctor setup dev dev-tui stop fmt check test verify build clean build-cli test-go daemon-stop test-menubar-smoke
+
+help:
+	@printf '%s\n' \
+	  'Portato — Unix Runbook v1.0 (macOS/Linux)' \
+	  'help / bare make: show this index; no changes' \
+	  'doctor: diagnose prerequisites; no installation or service changes' \
+	  'setup: download pinned Go modules and install the pinned linter in .tools/' \
+	  'dev: foreground daemon with isolated checkout configuration in .runtime/dev/' \
+	  'stop: no background services; foreground dev daemon stops with Ctrl-C' \
+	  'fmt: format Go sources in place' \
+	  'check: format validation, vet, lint, Swift compilation on macOS' \
+	  'test: Go tests, runbook tests, Swift IPC tests on macOS; no watch' \
+	  'verify: check then test, sequentially; no release packaging' \
+	  'build: Go binary; on macOS also an ad-hoc-signed app in dist/' \
+	  'clean: remove bin/, dist/, cover.out, Swift compilation directories; preserve tools and config' \
+	  'Extensions:' \
+	  '  dev-tui: attach to the running checkout dev daemon from a second terminal' \
+	  '  build-cli / build-all / cross: Go builds; snapshot: goreleaser packaging' \
+	  '  run: user-config TUI (not isolated); install-service: register user autostart' \
+	  '  daemon-stop / reload: change the user daemon; not checkout-scoped' \
+	  '  test-go / cover / vet / lint: individual Go checks; cover writes cover.out' \
+	  '  menubar / menubar-test / test-menubar-smoke: macOS build, IPC checks, isolated app smoke' \
+	  '  e2e-handoff / e2e-proxyjump / e2e-sshconfig / e2e-import: local integration fixtures' \
+	  '  e2e-docker: privileged Docker fixture; may recreate its named container' \
+	  '  third-party-licenses: installs upstream license tool; regenerates license bundle' \
+	  '  optimize-assets: rewrites landing images; requires external optimizers' \
+	  '  release / release-patch / release-minor / release-major: upstream only; publish branch and tag after prompt'
+
+doctor:
+	sh scripts/doctor.sh
+
+setup dev fmt check test verify build clean test-menubar-smoke:
+	+bun scripts/with-lock.js $(MAKE) --no-print-directory _$@
+
+.PHONY: _setup _dev _fmt _check _test _verify _build _clean _test-menubar-smoke
+_setup:
+	go mod download
+	mkdir -p .tools/bin
+	GOBIN="$(CURDIR)/.tools/bin" go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8
+
+_dev:
+	sh scripts/dev.sh
+
+dev-tui:
+	sh scripts/dev-tui.sh
+
+stop:
+	@echo 'No managed background services. Stop the foreground dev daemon with Ctrl-C.'
+
+_fmt:
+	gofmt -w .
+
+_check:
+	@files=$$(gofmt -l .); test -z "$$files" || { printf 'Run make fmt for:\n%s\n' "$$files"; exit 1; }
+	go vet ./...
+	sh scripts/check-linter.sh
+	$(LINT) run ./...
+	$(LINT) run ./... -c .golangci-tests.yml
+ifeq ($(shell uname -s),Darwin)
+	swift build --package-path macos
+endif
+
+_test:
+	go test ./...
+	bun test scripts/tests
+ifeq ($(shell uname -s),Darwin)
+	swift run --package-path macos PortatoCoreChecks
+endif
+
+_verify:
+	+$(MAKE) --no-print-directory _check
+	+$(MAKE) --no-print-directory _test
+
+_build:
+ifeq ($(shell uname -s),Darwin)
+	sh macos/scripts/build-app.sh
+else
+	go build -o bin/portato ./cmd/portato
+endif
+
+_clean:
+	bun scripts/clean.js
+
+_test-menubar-smoke:
+	@test "$$(uname -s)" = Darwin || { echo 'macOS required'; exit 1; }
+	bun macos/scripts/smoke.js
+	bun macos/scripts/startup-smoke.js
+	bun macos/scripts/compatibility-smoke.js
+
 .PHONY: build run test fmt vet lint cover build-all cross snapshot install-service stop reload e2e-handoff e2e-proxyjump e2e-sshconfig e2e-import e2e-docker third-party-licenses optimize-assets release release-patch release-minor release-major
 
-build:
+build-cli:
 	go build -o bin/portato ./cmd/portato
 
 run:
 	go run ./cmd/portato
 
-test:
+test-go:
 	go test ./...
 
 # cover runs the tests with a coverage profile and prints the total.
@@ -14,8 +107,7 @@ cover:
 	go test -coverprofile=cover.out ./...
 	go tool cover -func=cover.out | tail -1
 
-fmt:
-	gofmt -w .
+
 
 vet:
 	go vet ./...
@@ -29,10 +121,10 @@ vet:
 #      files too, so a too-complex test is caught locally before CodeFactor
 #      flags it on the public repo (Phase 46 regression). Looser than pass 1
 #      for production, so it adds catches only on _test.go.
-# Requires golangci-lint v1.x: go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8
+# Requires the pinned local linter: make setup
 lint:
-	golangci-lint run ./...
-	golangci-lint run ./... -c .golangci-tests.yml
+	$(LINT) run ./...
+	$(LINT) run ./... -c .golangci-tests.yml
 
 # build-all cross-compiles the binary for the MVP target matrix (SPEC §15).
 # cross is a back-compat alias.
@@ -53,11 +145,11 @@ snapshot:
 	goreleaser release --snapshot --clean
 
 # install-service builds the local binary and registers autostart (Phase 6).
-install-service: build
+install-service: build-cli
 	./bin/portato install
 
-# stop terminates the running daemon via the CLI (Phase 27).
-stop:
+# daemon-stop explicitly terminates the user daemon (outside the base contract).
+daemon-stop:
 	./bin/portato stop
 
 # reload makes the running daemon re-read config.yaml via the CLI (Phase 28).
@@ -166,6 +258,7 @@ release-major:
 	@$(MAKE) --no-print-directory release LEVEL=major
 
 release:
+	@sh scripts/check-release-origin.sh
 	@set -e; \
 	latest=$$(git describe --tags --abbrev=0 2>/dev/null) || { echo "no tags found; use: make release VERSION=vX.Y.Z"; exit 1; }; \
 	base=$${latest#v}; \
@@ -196,3 +289,12 @@ release:
 	printf "Push main + tag %s? [y/N] " "$$newtag"; read ans; \
 	case "$$ans" in y|Y|yes|YES) ;; *) echo "aborted"; exit 1;; esac; \
 	git push origin main && git tag -a "$$newtag" -m "Release $$newtag" && git push origin "$$newtag"
+
+.PHONY: menubar menubar-test
+menubar:
+	@test "$$(uname -s)" = Darwin || { echo "macOS required"; exit 1; }
+	$(MAKE) build
+
+menubar-test:
+	@test "$$(uname -s)" = Darwin || { echo "macOS required"; exit 1; }
+	cd macos && swift run PortatoCoreChecks
